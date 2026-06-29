@@ -1,16 +1,67 @@
-# Personal Website
+# Academic homepage
 
-This repository contains the python script to generate [my homepage](https://m-niemeyer.github.io/). It is very easy to adapt to your needs, and easy to maintain as the papers are crawled automatically from `publication_list.bib` and the talks from `talk_list.bib`.
+A single-page academic site (plain HTML + Tailwind via CDN). No build step.
 
-## How to use it
-1. Update and adjust the name and bio text in the function `get_personal_data` in the `build.py` file.
-2. Upload your own profile photo to `assets/img/profile.jpg`.
-3. Replace `publications_list.pub` with your publications. Note that the entries are crawled from top to bottom, i.e. the first entries are shown at the top. Further, the entries contain additional fields like `html`, `code`, and more, that are used to generate the links to the project page, code, etc. Check out the function `get_paper_entry` in `build.py` for more information.
-4. Replace `talk_list.pub` with your talks similar to before. Check out the function `get_talk_entry` in `build.py` for more information on accepted talk fields.
-5. Update the author websites in the function `get_author_dict` in `builds.py` to automatically generate the links to your co-authors' websites.
-6. Run `python build.py` which automatically generates the `index.html` file - the only file you need!
-7. Add credits and a link to my website; if you want me to also link to yours, send me a short message.
+## Files
 
-## Credits
+| File | What it's for |
+| --- | --- |
+| `index.html` | The page. Edit the `CONFIG` block at the very top for contact details & file paths. |
+| `publication_list.bib` | **Your publication list (BibTeX).** Add a paper = add one entry here. No HTML needed. |
+| `profile.jpg` | Your portrait (square). Optional — a placeholder shows until you add it. |
+| `technion-logo.png` | Affiliation logo. Optional. |
+| `figures/paper-*.png` | One teaser image per paper. Optional per paper. |
 
-The overall design and open-sourcing the script is inspired by [Jon Barron's awesome template](https://jonbarron.info/) and some functionality is inspired by [Andreas Geiger's cool website](https://cvlibs.net)!
+## Adding a publication
+
+Open `publication_list.bib` and add a BibTeX entry. Display order = order in the file.
+
+```bibtex
+@inproceedings{davidov2026mypaper,
+  title   = {My New Paper Title},
+  author  = {D. Davidov and A. Coauthor and C. Advisor},
+  venue   = {NeurIPS · 2026},
+  image   = {figures/paper-4.png},
+  summary = {One or two sentences describing the contribution.},
+  pdf     = {https://example.com/paper.pdf},
+  arxiv   = {https://arxiv.org/abs/0000.00000},
+  code    = {https://github.com/you/repo}
+}
+```
+
+Field notes:
+
+- **`title`** — required.
+- **`author`** — names separated by `and` (standard BibTeX). Both `First Last` and
+  `Last, First` work. Your own name (the `authorName` value in `index.html`'s
+  `CONFIG`, default `"D. Davidov"`) is **bolded automatically** — write it the same
+  way it should display.
+- **`venue`** — the small grey line above the title. If omitted, it's built from
+  `booktitle`/`journal` + `year`.
+- **`image`** — path to the teaser figure. Optional; a placeholder box shows if omitted.
+- **`summary`** — optional one-liner (you can also use `abstract`).
+- **Link fields** — any of `pdf`, `arxiv`, `code`, `url`, `video`, `slides`,
+  `poster`, `bibtex`, `data`, `demo`. They render as buttons in the order written,
+  and the **first** one is also where the title and the figure point. Add or remove
+  freely; unknown fields are ignored.
+- The `@type{...}` (e.g. `@inproceedings`, `@article`) and the citation key
+  (`davidov2026mypaper`) can be anything unique — they aren't shown on the page.
+
+## Previewing locally
+
+The page loads `publication_list.bib` with `fetch`, which browsers block when you open
+the file via `file://`. To preview locally, serve the folder over HTTP:
+
+```bash
+python3 -m http.server 8000
+# then open http://localhost:8000
+```
+
+(On GitHub Pages it just works — no server command needed.)
+
+## Publishing on GitHub Pages
+
+1. Push these files to a repo.
+2. Repo **Settings → Pages → Build and deployment → Deploy from a branch**, pick your
+   default branch and the `/ (root)` folder.
+3. The site appears at `https://<username>.github.io/<repo>/`.

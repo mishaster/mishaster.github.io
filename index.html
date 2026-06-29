@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Michael Blum — PhD Student</title>
+  <meta
+    name="description"
+    content="Academic homepage of Michael Blum, PhD student in Computer Science at the Technion – Israel Institute of Technology."
+  />
+  <meta name="author" content="Michael Blum" />
+
+  <!-- ===================================================================
+       ✏️  EDIT HERE — contact details & file paths.
+           Publications are NOT here: add/remove papers in publication_list.bib.
+       =================================================================== -->
+  <script>
+    const CONFIG = {
+      authorName: "D. Davidov",            // bolded automatically in author lists
+      email: "david.davidov@example.com",
+      linkedin: "https://www.linkedin.com/in/your-handle",
+
+      profileImage: "profile.jpg",          // square portrait; links to LinkedIn
+      institutionLogo: "technion-logo.png", // small logo; links to the institution
+      institutionUrl: "https://www.technion.ac.il/en/",
+    };
+    /* ========================= end of edit block ========================= */
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // ---- Apply CONFIG (contact, profile, affiliation) ----
+      const all = (sel) => Array.from(document.querySelectorAll(sel));
+      const setHref = (key, href) => all(`[data-link="${key}"]`).forEach((el) => { if (href) el.href = href; });
+      const setSrc = (key, src) => all(`[data-src="${key}"]`).forEach((el) => { if (src) el.src = src; });
+      const setText = (key, text) => all(`[data-text="${key}"]`).forEach((el) => { el.textContent = text; });
+
+      setHref("email", CONFIG.email ? "mailto:" + CONFIG.email : "");
+      setText("email", CONFIG.email);
+      setHref("linkedin", CONFIG.linkedin);
+      setText("linkedin", (CONFIG.linkedin || "").replace(/^https?:\/\//, "").replace(/\/$/, ""));
+      setSrc("profile", CONFIG.profileImage);
+      setSrc("institutionLogo", CONFIG.institutionLogo);
+      setHref("institution", CONFIG.institutionUrl);
+
+      // ---- Load & render publications from publication_list.bib ----
+      fetch("publication_list.bib", { cache: "no-cache" })
+        .then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
+        .then((text) => renderPublications(parseBib(text).map(bibEntryToPub)))
+        .catch(showPublicationsError);
+    });
+
+    // Build one <li> per publication by cloning the #pub-template.
+    function renderPublications(pubs) {
+      const list = document.getElementById("publication-list");
+      const tpl = document.getElementById("pub-template");
+      list.textContent = "";
+
+      if (!Array.isArray(pubs) || pubs.length === 0) {
+        list.innerHTML = '<li class="py-6 text-sm text-slate-400">No publications yet.</li>';
+        return;
+      }
+
+      const isExternal = (url) => /^https?:\/\//.test(url || "");
+      const openInNewTab = (el) => { el.target = "_blank"; el.rel = "noopener noreferrer"; };
+
+      pubs.forEach((p) => {
+        const node = tpl.content.firstElementChild.cloneNode(true);
+        const q = (sel) => node.querySelector(sel);
+
+        // The title and figure both point to the first link.
+        const primaryUrl = (p.links && p.links.length) ? p.links[0].url : null;
+
+        // Venue eyebrow
+        const venue = q("[data-venue]");
+        if (p.venue) venue.textContent = p.venue; else venue.remove();
+
+        // Title (+ link)
+        const title = q("[data-title]");
+        title.textContent = p.title || "Untitled";
+        if (primaryUrl) { title.href = primaryUrl; if (isExternal(primaryUrl)) openInNewTab(title); }
+        else title.removeAttribute("href");
+
+        // Authors (own name bolded)
+        fillAuthors(q("[data-authors]"), p.authors || "", CONFIG.authorName);
+
+        // Summary (optional)
+        const summary = q("[data-summary]");
+        if (p.summary) summary.textContent = p.summary; else summary.remove();
+
+        // Figure (+ link + image)
+        const figure = q("[data-figure]");
+        if (primaryUrl) { figure.href = primaryUrl; if (isExternal(primaryUrl)) openInNewTab(figure); }
+        else figure.removeAttribute("href");
+        const figImg = q("[data-figimg]");
+        if (p.image) figImg.src = p.image; else figImg.remove();
+
+        // Link buttons (any label → url pairs)
+        fillLinks(q("[data-links]"), p.links, isExternal, openInNewTab);
+
+        list.appendChild(node);
+      });
+    }
+
+    function fillAuthors(node, authors, me) {
+      node.textContent = "";
+      if (!me || !authors.includes(me)) { node.textContent = authors; return; }
+      authors.split(me).forEach((part, i) => {
+        if (i > 0) {
+          const span = document.createElement("span");
+          span.className = "font-medium text-slate-700";
+          span.textContent = me;
+          node.appendChild(span);
+        }
+        node.appendChild(document.createTextNode(part));
+      });
+    }
+
+    function fillLinks(container, links, isExternal, openInNewTab) {
+      container.textContent = "";
+      if (!links) return;
+      links.forEach(({ label, url }) => {
+        if (!url) return;
+        const a = document.createElement("a");
+        a.href = url;
+        a.className = "text-accent hover:text-accent-dark hover:underline";
+        a.textContent = label;
+        if (isExternal(url)) openInNewTab(a);
+        container.appendChild(a);
+      });
+    }
+
+    function showPublicationsError() {
+      const list = document.getElementById("publication-list");
+      list.innerHTML =
+        '<li class="py-6 text-sm leading-relaxed text-slate-500">' +
+        'Could not load <code class="text-slate-700">publication_list.bib</code>. ' +
+        'If you opened this file directly, view it through a local server ' +
+        '(e.g. <code class="text-slate-700">python3 -m http.server</code>) or on GitHub Pages.' +
+        "</li>";
+    }
+
+    // ===== Minimal BibTeX parser → normalized publication objects =====
+    const LINK_LABELS = {
+      url: "Project Page", html: "Project Page", project: "Project Page",
+      pdf: "PDF", paper: "PDF", arxiv: "arXiv", code: "Code", github: "Code",
+      video: "Video", slides: "Slides", poster: "Poster", bibtex: "BibTeX",
+      data: "Data", demo: "Demo",
+    };
+
+    function cleanValue(v) {
+      return v.replace(/[{}]/g, "").replace(/\\([&_%#$])/g, "$1").replace(/\s+/g, " ").trim();
+    }
+
+    function parseBib(text) {
+      text = text.replace(/^\s*%.*$/gm, ""); // strip whole-line comments
+      const entries = [];
+      let i = 0;
+      const n = text.length;
+      const isWs = (c) => c === " " || c === "\t" || c === "\n" || c === "\r";
+      const skipWs = () => { while (i < n && isWs(text[i])) i++; };
+
+      while (i < n) {
+        while (i < n && text[i] !== "@") i++;
+        if (i >= n) break;
+        i++; // '@'
+        let type = "";
+        while (i < n && /[a-zA-Z]/.test(text[i])) { type += text[i]; i++; }
+        type = type.toLowerCase();
+        skipWs();
+        if (text[i] !== "{") continue;
+        i++; // '{'
+        if (type === "comment" || type === "string" || type === "preamble") {
+          let depth = 1;
+          while (i < n && depth > 0) { if (text[i] === "{") depth++; else if (text[i] === "}") depth--; i++; }
+          continue;
+        }
+        let key = "";
+        while (i < n && text[i] !== "," && text[i] !== "}") { key += text[i]; i++; }
+        if (text[i] === ",") i++;
+        const entry = { type, key: key.trim(), fields: {}, order: [] };
+        while (i < n) {
+          skipWs();
+          if (text[i] === "}") { i++; break; }
+          if (text[i] === ",") { i++; continue; }
+          let name = "";
+          while (i < n && /[a-zA-Z0-9_\-]/.test(text[i])) { name += text[i]; i++; }
+          name = name.toLowerCase();
+          skipWs();
+          if (text[i] !== "=") { while (i < n && text[i] !== "," && text[i] !== "}") i++; continue; }
+          i++; // '='
+          skipWs();
+          let value = "";
+          if (text[i] === "{") {
+            let depth = 0;
+            while (i < n) {
+              const c = text[i];
+              if (c === "{") { depth++; if (depth > 1) value += c; i++; }
+              else if (c === "}") { depth--; if (depth > 0) value += c; i++; if (depth === 0) break; }
+              else { value += c; i++; }
+            }
+          } else if (text[i] === '"') {
+            i++;
+            let depth = 0;
+            while (i < n) {
+              const c = text[i];
+              if (c === "{") { depth++; value += c; i++; }
+              else if (c === "}") { depth--; value += c; i++; }
+              else if (c === '"' && depth === 0) { i++; break; }
+              else { value += c; i++; }
+            }
+          } else {
+            while (i < n && text[i] !== "," && text[i] !== "}") { value += text[i]; i++; }
+          }
+          if (name) { if (!(name in entry.fields)) entry.order.push(name); entry.fields[name] = cleanValue(value); }
+        }
+        if (entry.key || entry.order.length) entries.push(entry);
+      }
+      return entries;
+    }
+
+    function formatAuthors(raw) {
+      if (!raw) return "";
+      return raw.split(/\s+and\s+/).map((a) => {
+        a = a.trim();
+        if (a.includes(",")) {
+          const parts = a.split(",");
+          const last = parts[0].trim();
+          const first = parts.slice(1).join(",").trim();
+          return (first ? first + " " : "") + last;
+        }
+        return a;
+      }).filter(Boolean).join(", ");
+    }
+
+    function bibEntryToPub(e) {
+      const f = e.fields;
+      const links = [];
+      e.order.forEach((name) => { if (LINK_LABELS[name] && f[name]) links.push({ label: LINK_LABELS[name], url: f[name] }); });
+      let venue = f.venue || "";
+      if (!venue) { const v = f.booktitle || f.journal || f.publisher || ""; venue = [v, f.year].filter(Boolean).join(" · "); }
+      return {
+        title: f.title || "Untitled",
+        authors: formatAuthors(f.author),
+        venue,
+        image: f.image || f.img || "",
+        summary: f.summary || f.abstract || "",
+        links,
+      };
+    }
+  </script>
+
+  <!-- Inline SVG favicon (no extra network request) -->
+  <link
+    rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230064b1'/><text x='50' y='71' font-size='58' font-family='sans-serif' font-weight='600' fill='white' text-anchor='middle'>D</text></svg>"
+  />
+
+  <!-- Inter typeface -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            accent: { DEFAULT: '#0064b1', dark: '#004d87' },
+          },
+        },
+      },
+    };
+  </script>
+</head>
+
+<body class="bg-white font-sans text-slate-700 antialiased">
+  <!-- ============================== Top bar ============================== -->
+  <header class="border-b border-slate-100">
+    <nav class="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
+      <a href="#" class="font-semibold text-slate-900 hover:text-accent">Michael Blum</a>
+
+      <div class="flex items-center gap-5 sm:gap-6">
+        <ul class="hidden gap-6 text-sm text-slate-600 sm:flex">
+          <li><a href="#about" class="hover:text-accent">About</a></li>
+          <li><a href="#research" class="hover:text-accent">Research</a></li>
+          <li><a href="#contact" class="hover:text-accent">Contact</a></li>
+        </ul>
+
+        <div class="flex items-center gap-4">
+          <a data-link="email" href="#" aria-label="Email Michael Blum" title="Email" class="text-slate-400 hover:text-accent">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path d="M1.5 8.67v8.58a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3V8.67l-8.928 5.493a3 3 0 0 1-3.144 0L1.5 8.67Z" />
+              <path d="M22.5 6.908V6.75a3 3 0 0 0-3-3h-15a3 3 0 0 0-3 3v.158l9.714 5.978a1.5 1.5 0 0 0 1.572 0L22.5 6.908Z" />
+            </svg>
+          </a>
+          <a data-link="linkedin" href="#" target="_blank" rel="noopener noreferrer" aria-label="Michael Blum on LinkedIn" title="LinkedIn" class="text-slate-400 hover:text-accent">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+            </svg>
+          </a>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6">
+    <!-- ============================ Hero / About ========================== -->
+    <section id="about" class="py-16 sm:py-20">
+      <div class="flex flex-col gap-8 sm:flex-row sm:items-center">
+        <div class="mx-auto shrink-0 sm:mx-0">
+          <a data-link="linkedin" href="#" target="_blank" rel="noopener noreferrer" aria-label="Michael Blum on LinkedIn" title="Connect on LinkedIn" class="relative block h-32 w-32 overflow-hidden rounded-full ring-1 ring-slate-200 hover:ring-accent">
+            <span class="absolute inset-0 flex items-center justify-center bg-slate-100 text-3xl font-semibold text-slate-400" aria-hidden="true">DD</span>
+            <img data-src="profile" alt="Portrait of Michael Blum" class="absolute inset-0 h-full w-full object-cover" onerror="this.style.display='none'" />
+          </a>
+        </div>
+
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+            <a data-link="email" href="#" class="hover:underline">Michael Blum</a>
+          </h1>
+          <p class="mt-2 text-lg text-slate-600">PhD Student, Computer Science</p>
+
+          <a data-link="institution" href="#" target="_blank" rel="noopener noreferrer" class="mt-3 inline-flex items-center gap-2.5 text-sm text-slate-500 hover:underline">
+            <img data-src="institutionLogo" alt="" class="h-6 w-auto" onerror="this.style.display='none'" />
+            <span>Technion – Israel Institute of Technology</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="mt-10 space-y-4 text-base leading-relaxed text-slate-600">
+        <p>
+          I am a PhD student in the Department of Computer Science at the
+          Technion – Israel Institute of Technology, advised by [Advisor Name].
+          My research lies at the intersection of [machine learning] and [your
+          secondary area], with a focus on [a one-line description of your
+          thesis problem].
+        </p>
+        <p>
+          Before joining the Technion, I completed my [B.Sc. / M.Sc.] in [Field]
+          at [Previous Institution]. I am broadly interested in [topic one],
+          [topic two], and [topic three].
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== Research & Publications ====================== -->
+    <section id="research" class="border-t border-slate-100 py-16 sm:py-20">
+      <h2 class="text-xl font-semibold text-slate-900">
+        Current Research &amp; Publications
+      </h2>
+      <p class="mt-3 max-w-prose text-base leading-relaxed text-slate-600">
+        A selection of recent and ongoing work. Add or edit entries in
+        <code class="text-slate-700">publication_list.bib</code>.
+      </p>
+
+      <!-- Filled at runtime from publication_list.bib (see the template below) -->
+      <ol id="publication-list" class="mt-10 divide-y divide-slate-100">
+        <li class="py-6 text-sm text-slate-400">Loading publications…</li>
+      </ol>
+    </section>
+  </main>
+
+  <!-- =========================== Contact footer ========================= -->
+  <footer id="contact" class="border-t border-slate-100">
+    <div class="mx-auto max-w-3xl px-6 py-16 sm:py-20">
+      <h2 class="text-xl font-semibold text-slate-900">Contact</h2>
+      <p class="mt-3 max-w-prose text-base leading-relaxed text-slate-600">
+        I am based in Haifa, Israel. Feel free to reach out by email or connect
+        on LinkedIn.
+      </p>
+
+      <dl class="mt-6 space-y-3 text-base">
+        <div class="flex items-center gap-3">
+          <dt class="w-20 shrink-0 text-slate-400">Location</dt>
+          <dd class="text-slate-700">Haifa, Israel</dd>
+        </div>
+        <div class="flex items-center gap-3">
+          <dt class="w-20 shrink-0 text-slate-400">Email</dt>
+          <dd class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true">
+              <path d="M1.5 8.67v8.58a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3V8.67l-8.928 5.493a3 3 0 0 1-3.144 0L1.5 8.67Z" />
+              <path d="M22.5 6.908V6.75a3 3 0 0 0-3-3h-15a3 3 0 0 0-3 3v.158l9.714 5.978a1.5 1.5 0 0 0 1.572 0L22.5 6.908Z" />
+            </svg>
+            <a data-link="email" data-text="email" href="#" class="text-accent hover:text-accent-dark hover:underline">david.davidov@example.com</a>
+          </dd>
+        </div>
+        <div class="flex items-center gap-3">
+          <dt class="w-20 shrink-0 text-slate-400">LinkedIn</dt>
+          <dd class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true">
+              <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z" />
+            </svg>
+            <a data-link="linkedin" data-text="linkedin" href="#" target="_blank" rel="noopener noreferrer" class="text-accent hover:text-accent-dark hover:underline">linkedin.com/in/your-handle</a>
+          </dd>
+        </div>
+      </dl>
+
+      <p class="mt-12 text-xs text-slate-400">© 2026 Michael Blum</p>
+    </div>
+  </footer>
+
+  <!-- ===== Publication template — the design for ONE entry. You normally
+             never touch this; edit data in publication_list.bib instead. ===== -->
+  <template id="pub-template">
+    <li class="py-6 first:pt-0">
+      <div class="flex flex-col gap-4 sm:flex-row sm:gap-6">
+        <a data-figure href="#" aria-label="Open the paper" class="relative flex h-40 w-full shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100 ring-1 ring-slate-200 hover:ring-slate-300 sm:h-24 sm:w-32">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="h-7 w-7 text-slate-300" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+          <img data-figimg alt="" class="absolute inset-0 h-full w-full object-cover" onerror="this.style.display='none'" />
+        </a>
+
+        <div class="min-w-0">
+          <p data-venue class="text-xs font-medium uppercase tracking-wider text-slate-400"></p>
+          <h3 class="mt-2 text-base font-semibold text-slate-900">
+            <a data-title href="#" class="hover:underline"></a>
+          </h3>
+          <p data-authors class="mt-1 text-sm text-slate-500"></p>
+          <p data-summary class="mt-2 text-sm leading-relaxed text-slate-600"></p>
+          <div data-links class="mt-3 flex flex-wrap gap-4 text-sm"></div>
+        </div>
+      </div>
+    </li>
+  </template>
+</body>
+</html>
